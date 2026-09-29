@@ -44,3 +44,4 @@ backend/gradcam_test_output.png
 backend/gradcam_demo_output.png
 backend/data/era5/cache/
 tmp_*.py
+*.log

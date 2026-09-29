@@ -160,7 +160,10 @@ function getInputs() {
             Number(el("vorticity").value),
 
         environment_source:
-            era5Active ? "era5" : "input"
+            era5Active ? "era5" : "input",
+
+        sst_land:
+            era5Land === true
     };
 
 }
@@ -176,9 +179,11 @@ function getInputs() {
    ========================================================= */
 
 let era5Active = false;   /* true only right after a successful ERA5 fetch */
+let era5Land = false;     /* true when the last ERA5 result was a land point (SST n/a) */
 
 function clearEra5Badge() {
     era5Active = false;
+    era5Land = false;
     const badge = el("era5Badge");
     if (badge) {
         badge.classList.add("hidden");
@@ -216,14 +221,27 @@ async function fetchFromEra5() {
         el("vorticity").value = result.vorticity_850_s1;
 
         era5Active = true;
+        era5Land = result.land === true;
+        if (era5Land) {
+            el("sst").value = "";   /* over land: no SST to fill, never 0 */
+        }
         const badge = el("era5Badge");
-        badge.textContent = `ERA5 REAL DATA · valid ${result.valid_time_utc || result.requested_time_utc}`;
+        badge.textContent = `ERA5 REAL DATA · valid ${result.valid_time_utc || result.requested_time_utc}` +
+            (era5Land ? " · LAND POINT (SST n/a)" : "");
         badge.classList.remove("hidden");
 
+        const near = result.nearest_ocean_sst;
+        const nearPart = near
+            ? ` Nearest ocean SST ${near.sst_c}°C, ~${near.distance_km} km away at (${near.lat}, ${near.lon}) - context only, not used in any verdict.`
+            : "";
+
         statusEl.textContent =
-            `Loaded from ERA5 (Copernicus reanalysis, ${result.lag_days}-day typical lag - ` +
-            `not a live observation). ${result.cached ? "Served from local cache." : ""}` +
-            (result.seed ? " Pre-fetched value shipped with the app." : "");
+            (era5Land
+                ? `Over land: SST not applicable (ERA5 SST is ocean-only). Shear/humidity/vorticity below are real.`
+                : `Loaded from ERA5 (Copernicus reanalysis, ${result.lag_days}-day typical lag - ` +
+                  `not a live observation).`) +
+            `${result.cached ? " Served from local cache." : ""}` +
+            (result.seed ? " Pre-fetched value shipped with the app." : "") + nearPart;
 
     } catch (error) {
 
@@ -1263,6 +1281,8 @@ function renderEnvironmentHint(verdict) {
         unfavorable: "look unfavorable for intensification (cool SST and/or high wind shear)",
         neutral: "are mixed/neutral for intensification (or SST/shear look favorable but " +
                  "700hPa humidity is too dry, which inhibits intensification)",
+        not_applicable: "cannot be judged for intensification here - over land, SST is not " +
+                 "applicable (ERA5 SST is ocean-only). Shear/humidity shown for context only",
     };
 
     const humidityPart = humidity != null ? `, humidity ${humidity}%` : "";
@@ -1271,8 +1291,11 @@ function renderEnvironmentHint(verdict) {
         : "";
 
     el2.textContent =
-        `Environment check (rule-based, not the AI model): SST ${sst}°C, wind shear ${shear} kt` +
-        `${humidityPart} → conditions ${labels[verdict] || verdict}.${vorticityPart}`;
+        verdict === "not_applicable"
+            ? `Environment check (rule-based, not the AI model): over land, so the SST/rapid-intensification ` +
+              `check is not applicable.${vorticityPart}`
+            : `Environment check (rule-based, not the AI model): SST ${sst}°C, wind shear ${shear} kt` +
+              `${humidityPart} → conditions ${labels[verdict] || verdict}.${vorticityPart}`;
     el2.classList.remove("hidden");
 
 }

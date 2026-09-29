@@ -28,15 +28,23 @@ def warm(lat: float, lon: float) -> bool:
     try:
         result = era5.fetch_environment(lat, lon, use_cache=False, allow_live=True)
     except (era5.ERA5NotConfigured, era5.ERA5Error) as exc:
-        print(f"  FAILED: {exc}")
+        print(f"  REFUSED (no seed written): {exc}")
         return False
     era5.ensure_dirs()
     path = era5.SEED_DIR / era5._seed_name(lat, lon)
     seed = {k: v for k, v in result.items() if k != "cached"}
+    if result.get("land"):
+        seed["land"] = True  # explicit flag: SST null is "over land", not missing
+        near = result.get("nearest_ocean_sst")
+        print(f"  LAND point (SST not applicable - stored null with reason, NOT invented): "
+              f"shear={result['wind_shear_kt']}kt humidity={result['humidity_pct']}% "
+              f"vorticity={result['vorticity_850_s1']} "
+              f"nearest_ocean={near} valid={result.get('valid_time_utc')} -> {path}")
+    else:
+        print(f"  ocean point: sst={result['sst_c']}C shear={result['wind_shear_kt']}kt "
+              f"humidity={result['humidity_pct']}% valid={result.get('valid_time_utc')} "
+              f"-> {path}")
     path.write_text(json.dumps(seed, indent=1))
-    print(f"  ok: sst={result['sst_c']}C shear={result['wind_shear_kt']}kt "
-          f"humidity={result['humidity_pct']}% valid={result.get('valid_time_utc')} "
-          f"-> {path}")
     return True
 
 

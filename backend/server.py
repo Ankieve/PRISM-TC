@@ -248,6 +248,7 @@ def run_prediction(body):
     wind_shear = optional_number(body, "wind_shear", 0, 250)
     humidity = optional_number(body, "humidity", 0, 100)
     vorticity = optional_number(body, "vorticity", -1, 1)
+    sst_land = body.get("sst_land") is True
     environment_source = str(body.get("environment_source") or "input")
     if environment_source not in ("input", "era5"):
         environment_source = "input"
@@ -344,7 +345,7 @@ def run_prediction(body):
             mode="image", source=source, tracks=TRACKS, exclude_storms=exclude,
             past_track=past, warnings=warnings, extra_meta=extra,
             sst=sst, wind_shear=wind_shear, humidity=humidity, vorticity=vorticity,
-            environment_source=environment_source)
+            environment_source=environment_source, sst_land=sst_land)
 
     # no image: classify from the wind the user typed (rule, not AI)
     idx = logic.class_from_wind(wind_in)
@@ -355,7 +356,7 @@ def run_prediction(body):
         lat=lat, lon=lon, wind_input=wind_in, pressure_input=pressure_in,
         mode="rule-based", source="rule", tracks=TRACKS, warnings=warnings,
         extra_meta=extra, sst=sst, wind_shear=wind_shear, humidity=humidity,
-        vorticity=vorticity, environment_source=environment_source)
+        vorticity=vorticity, environment_source=environment_source, sst_land=sst_land)
 
 
 def run_demo(query):

@@ -350,10 +350,18 @@ def _extract(single_path: Path, pressure_path: Path, lat: float, lon: float) -> 
 
         sst_var = "sst" if "sst" in ds_s.variables else "sea_surface_temperature"
         sst_k = scalar(pt_s[sst_var])
-        if sst_k != sst_k:  # NaN - point is over land, ERA5 SST is ocean-only
-            raise ERA5Error("SST is undefined at this point (likely over land in ERA5's "
-                             "ocean mask) - try a point further offshore.")
-        sst_c = round(sst_k - 273.15, 2)
+        if sst_k != sst_k:  # NaN - point is over land, ERA5 SST is ocean-only.
+            # Honest land path (never invent an SST, never fail the whole
+            # fetch): shear/humidity/vorticity below are still real and are
+            # returned, with SST null and a reason. See _fetch_live, which
+            # additionally attaches the nearest real ocean SST for context.
+            sst_c = None
+            sst_note = "over land, SST not applicable"
+            land = True
+        else:
+            sst_c = round(sst_k - 273.15, 2)
+            sst_note = None
+            land = False
 
         level_dim = "level" if "level" in pt_p.dims else "pressure_level"
 
@@ -384,6 +392,8 @@ def _extract(single_path: Path, pressure_path: Path, lat: float, lon: float) -> 
 
         return {
             "sst_c": sst_c,
+            "sst_note": sst_note,
+            "land": land,
             "wind_shear_kt": wind_shear_kt,
             "humidity_pct": humidity_pct,
             "vorticity_850_s1": vorticity_850,
@@ -474,6 +484,45 @@ def _fetch_worker(queue, lat: float, lon: float, when_iso: str,
             pass
 
 
+def _haversine_km(lat1, lon1, lat2, lon2):
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _nearest_ocean_sst(single_box_path: Path, lat: float, lon: float):
+    """Nearest grid cell with a real (non-NaN) SST in an already-downloaded
+    single-level file. Pure read of real ERA5 data - nothing invented. Returns
+    {sst_c, lat, lon, distance_km} or None when no ocean cell is in the box."""
+    import xarray as xr  # lazy: only inside the short-lived fetch worker
+    with xr.open_dataset(single_box_path) as ds:
+        var = "sst" if "sst" in ds.variables else "sea_surface_temperature"
+        da = ds[var]
+        lats = [float(v) for v in ds["latitude"].values.reshape(-1)]
+        lons = [float(v) % 360 for v in ds["longitude"].values.reshape(-1)]
+        best = None
+        for i, la in enumerate(lats):
+            for j, lo in enumerate(lons):
+                try:
+                    v = float(da.values.reshape(-1)[i * len(lons) + j])
+                except Exception:  # noqa: BLE001
+                    continue
+                if v != v:  # NaN - land mask, skip
+                    continue
+                lon_c = lo if lo <= 180 else lo - 360
+                d = _haversine_km(lat, lon, la, lon_c)
+                if best is None or d < best[0]:
+                    best = (d, la, lon_c, v)
+        if best is None:
+            return None
+        d, la, lo, v = best
+        return {"sst_c": round(v - 273.15, 2), "lat": round(la, 2),
+                "lon": round(lo, 2), "distance_km": round(d, 1)}
+
+
 def _fetch_live(lat: float, lon: float, single_req: dict, pressure_req: dict) -> dict:
     """One real CDS round-trip in the CURRENT process. Used by the worker
     child, and as a last-resort fallback when no child process can be
@@ -483,13 +532,31 @@ def _fetch_live(lat: float, lon: float, single_req: dict, pressure_req: dict) ->
     single_path = _retrieve(client, "reanalysis-era5-single-levels", single_req)
     pressure_path = _retrieve(client, "reanalysis-era5-pressure-levels", pressure_req)
     try:
-        return _extract(single_path, pressure_path, lat, lon)
+        out = _extract(single_path, pressure_path, lat, lon)
     finally:
         for p in (single_path, pressure_path):
             try:
                 p.unlink(missing_ok=True)
             except Exception:  # noqa: BLE001
                 pass
+    if out.get("land"):
+        # One small follow-up: a 1-degree single-level box around the point,
+        # scanned locally for the nearest real ocean SST (context only -
+        # never used in any verdict). Still pure ERA5 data, one extra file.
+        box_req = dict(single_req)
+        box_req["area"] = [round(lat + 0.5, 2), round(lon - 0.5, 2),
+                           round(lat - 0.5, 2), round(lon + 0.5, 2)]
+        box_path = _retrieve(client, "reanalysis-era5-single-levels", box_req)
+        try:
+            near = _nearest_ocean_sst(box_path, lat, lon)
+        finally:
+            try:
+                box_path.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+        if near is not None:
+            out["nearest_ocean_sst"] = near
+    return out
 
 
 def _classify_worker_error(detail: str):

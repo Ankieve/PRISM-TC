@@ -62,7 +62,8 @@ def rapid_intensification(winds):
     return (max(winds[1:]) - winds[0]) >= 30.0
 
 
-def environment_favors_intensification(sst_c, wind_shear_kt, humidity_pct=None):
+def environment_favors_intensification(sst_c, wind_shear_kt, humidity_pct=None, *,
+                                       sst_land=False):
     """Simple, documented meteorological heuristic - NOT machine learning and NOT
     connected to the analog track method above. It only fires when the user has
     actually supplied sst/wind_shear (both optional API fields); with either one
@@ -90,8 +91,14 @@ def environment_favors_intensification(sst_c, wind_shear_kt, humidity_pct=None):
       - When humidity_pct is None (not supplied), behaviour is identical to
         before this parameter existed.
 
-    Returns one of "favorable", "unfavorable", "neutral", or None.
+    Returns one of "favorable", "unfavorable", "neutral", "not_applicable", or None.
+    "not_applicable" is returned ONLY when sst_land is True and no SST was
+    supplied: the point is over land, ERA5 SST is ocean-only, and there is no
+    sea surface to check - so no favourable/unfavourable verdict is possible.
+    A null SST must never be treated as 0C (that would fake "unfavorable").
     """
+    if sst_land and sst_c is None:
+        return "not_applicable"
     if sst_c is None or wind_shear_kt is None:
         return None
     if sst_c >= 26.5 and wind_shear_kt <= 10.0:
@@ -175,7 +182,8 @@ def build_response(*, class_index, category, confidence, probs, lat, lon,
                    wind_input, pressure_input, mode, source, tracks,
                    exclude_storms=(), past_track=None, warnings=None,
                    extra_meta=None, sst=None, wind_shear=None,
-                   humidity=None, vorticity=None, environment_source="input"):
+                   humidity=None, vorticity=None, environment_source="input",
+                   sst_land=False):
     """Assemble the JSON the frontend expects.
 
     mode   : "image" (wind is an estimate from the class) or
@@ -206,8 +214,16 @@ def build_response(*, class_index, category, confidence, probs, lat, lon,
     # environment_favors_intensification docstring). This is separate from and does
     # not change the analog-based rapid_intensification flag above - the two are
     # surfaced independently so neither is misrepresented as informing the other.
-    env_verdict = environment_favors_intensification(sst, wind_shear, humidity)
-    if env_verdict is not None:
+    env_verdict = environment_favors_intensification(
+        sst, wind_shear, humidity, sst_land=sst_land)
+    if env_verdict == "not_applicable":
+        warnings.append(
+            "Over land: SST/rapid-intensification check not applicable (ERA5 SST is "
+            "ocean-only - no sea surface here to check). Wind shear and humidity "
+            "above are still real and shown for context (meteorological rule of "
+            "thumb, not the AI model or the analog outlook)."
+        )
+    elif env_verdict is not None:
         humidity_note = f", humidity={humidity:.0f}%" if humidity is not None else ""
         warnings.append(
             f"Rule-based environment check: SST={sst:.1f}C, wind shear={wind_shear:.1f}kt"
