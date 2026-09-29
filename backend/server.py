@@ -160,7 +160,7 @@ def init_state():
             ensure_dirs()
     except Exception:
         pass
-    for _mp in (BACKEND_DIR / "model_v3b.pth", BACKEND_DIR / "model_v4_seed1.pth"):
+    for _mp in (BACKEND_DIR / "model_v3b.onnx", BACKEND_DIR / "model_v4_seed1.onnx"):
         try:
             if _mp.is_file():
                 print(f"Model {_mp.name} SHA256: {hashlib.sha256(_mp.read_bytes()).hexdigest()}")
@@ -620,7 +620,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def _model_hashes():
     out = {}
-    for name in ("model_v3b.pth", "model_v4_seed1.pth"):
+    for name in ("model_v3b.onnx", "model_v4_seed1.onnx"):
         p = BACKEND_DIR / name
         try:
             out[name] = hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "MISSING"

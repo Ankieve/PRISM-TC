@@ -1,8 +1,8 @@
 """
 Manual Grad-CAM demo/sanity-check - NOT an automated test.
 
-Run this yourself on a machine with torch, timm and the real backend
-model files (model_v3b.pth + model_v4_seed1.pth):
+Run this yourself on a machine with onnxruntime and the real backend
+model files (model_v3b.onnx + model_v4_seed1.onnx + onnx_assets.npz):
 
     python backend/gradcam_demo.py
     python backend/gradcam_demo.py --sample img_1791.png
@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--out", default=str(BACKEND_DIR / "gradcam_demo_output.png"))
     args = parser.parse_args()
 
-    model_paths = [BACKEND_DIR / "model_v3b.pth", BACKEND_DIR / "model_v4_seed1.pth"]
+    model_paths = [BACKEND_DIR / "model_v3b.onnx", BACKEND_DIR / "model_v4_seed1.onnx"]
     missing = [str(p) for p in model_paths if not p.is_file()]
     if missing:
         print(f"ERROR: missing model file(s): {missing} - copy them into backend/ first.")

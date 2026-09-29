@@ -1,0 +1,12 @@
+{
+ "sst_c": 28.32,
+ "wind_shear_kt": 8.3,
+ "humidity_pct": 12.1,
+ "vorticity_850_s1": 1.1562136933207512e-05,
+ "valid_time_utc": "['2026-09-24T21:00:00.000000000']",
+ "requested_time_utc": "2026-09-24T21:00:00Z",
+ "lag_days": 5,
+ "lat": 20.3,
+ "lon": 65.4,
+ "source": "ERA5 reanalysis (Copernicus Climate Data Store) - see backend/era5.py"
+}
