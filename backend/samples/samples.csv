@@ -1,0 +1,11 @@
+filename,true_class,storm_id,lat,lon,time,vmax
+img_2577.png,Cyclonic Storm,201402I,16.1,68.1,2014061012,45.0
+img_0049.png,Cyclonic Storm,200301I,14.8,86.5,2003051421,35.0
+img_0956.png,Depression,200604I,20.3,65.4,2006092612,25.0
+img_0495.png,Depression,200502I,4.7,89.7,2005011206,20.0
+img_1791.png,Extremely Severe/Super Cyclone,201004I,20.1,93.5,2010102215,108.0
+img_1788.png,Extremely Severe/Super Cyclone,201004I,19.0,93.0,2010102206,125.0
+img_1778.png,Severe Cyclonic Storm,201004I,17.3,91.5,2010102100,50.0
+img_0924.png,Severe Cyclonic Storm,200604I,20.3,66.6,2006092212,50.0
+img_0266.png,Very Severe Cyclonic Storm,200402I,20.1,93.1,2004051906,65.0
+img_1792.png,Very Severe Cyclonic Storm,201004I,20.5,93.8,2010102218,80.0

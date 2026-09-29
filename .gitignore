@@ -1,0 +1,46 @@
+# Secrets - never commit
+.env
+
+# Stale / superseded model files - never deploy these. The live models are
+# backend/model_v3b.pth + backend/model_v4_seed1.pth (16 MB each, under the
+# 100 MB git limit, kept in git). Anything else must not be loadable.
+backend/model.pth
+backend/model_v2_backup.pth
+*.UNUSED
+
+# Satellite pipeline's own downloaded/generated data - regenerated at runtime
+backend/data/satellite/raw/
+backend/data/satellite/processed/
+backend/data/satellite/latest/
+backend/data/satellite/metadata/
+backend/satellite/test_output_full_disk.png
+backend/satellite/test_output_crop.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+
+# Numbered frontend duplicates - not referenced by index.html, not deployed
+app-1.js
+app-2.js
+app-3.js
+app-4.js
+index-1.html
+index-2.html
+index-3.html
+
+# Reference / working folders - never deployed
+_original_frontend_backup/
+Claude outputs/
+
+# Local test artefacts
+backend/gradcam_test_output.png
+backend/gradcam_demo_output.png
+backend/data/era5/cache/
+tmp_check.py

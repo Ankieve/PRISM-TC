@@ -1,0 +1,22 @@
+# PRISM-TC on Render - ONE web service (backend/server.py serves the
+# frontend AND all /api routes; no separate frontend service).
+services:
+  - type: web
+    name: vayuvega
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt -r backend/requirements-era5.txt
+    startCommand: python backend/server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      # PORT is set automatically by Render - do not hardcode it.
+      # The server already binds 0.0.0.0:$PORT (see backend/server.py).
+      # Set these manually in the dashboard (names only - paste values there):
+      #   CDSAPI_URL  = https://cds.climate.copernicus.eu/api
+      #   CDSAPI_KEY  = <your personal access token, no quotes>
+      #   ERA5_ENABLED = true
+      #   SATELLITE_ENABLED = true (or false to disable the live card)

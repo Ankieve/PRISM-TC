@@ -1,0 +1,373 @@
+true_class,pred_class,confidence
+Depression,Depression,85.1
+Depression,Cyclonic Storm,82.7
+Depression,Depression,93.2
+Depression,Depression,91.6
+Depression,Depression,90.5
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,99.3
+Depression,Cyclonic Storm,93.5
+Depression,Cyclonic Storm,85.4
+Depression,Cyclonic Storm,62.1
+Depression,Depression,85.1
+Depression,Depression,61.1
+Depression,Cyclonic Storm,91.7
+Depression,Cyclonic Storm,92.0
+Depression,Cyclonic Storm,86.9
+Cyclonic Storm,Cyclonic Storm,94.9
+Cyclonic Storm,Cyclonic Storm,98.0
+Cyclonic Storm,Cyclonic Storm,100.0
+Severe Cyclonic Storm,Cyclonic Storm,98.7
+Severe Cyclonic Storm,Cyclonic Storm,99.9
+Severe Cyclonic Storm,Cyclonic Storm,96.2
+Severe Cyclonic Storm,Cyclonic Storm,99.2
+Severe Cyclonic Storm,Cyclonic Storm,98.9
+Severe Cyclonic Storm,Cyclonic Storm,100.0
+Severe Cyclonic Storm,Depression,64.3
+Severe Cyclonic Storm,Cyclonic Storm,99.8
+Severe Cyclonic Storm,Cyclonic Storm,63.2
+Severe Cyclonic Storm,Depression,56.0
+Severe Cyclonic Storm,Depression,78.9
+Severe Cyclonic Storm,Depression,77.4
+Severe Cyclonic Storm,Cyclonic Storm,99.9
+Severe Cyclonic Storm,Cyclonic Storm,87.7
+Severe Cyclonic Storm,Cyclonic Storm,88.7
+Severe Cyclonic Storm,Cyclonic Storm,100.0
+Severe Cyclonic Storm,Cyclonic Storm,97.0
+Severe Cyclonic Storm,Cyclonic Storm,99.9
+Severe Cyclonic Storm,Cyclonic Storm,100.0
+Severe Cyclonic Storm,Cyclonic Storm,99.6
+Severe Cyclonic Storm,Cyclonic Storm,99.1
+Severe Cyclonic Storm,Cyclonic Storm,99.8
+Severe Cyclonic Storm,Cyclonic Storm,99.2
+Cyclonic Storm,Cyclonic Storm,62.0
+Cyclonic Storm,Cyclonic Storm,100.0
+Cyclonic Storm,Cyclonic Storm,99.7
+Cyclonic Storm,Cyclonic Storm,100.0
+Cyclonic Storm,Depression,95.7
+Cyclonic Storm,Cyclonic Storm,98.5
+Cyclonic Storm,Cyclonic Storm,53.3
+Cyclonic Storm,Depression,87.7
+Cyclonic Storm,Cyclonic Storm,99.9
+Cyclonic Storm,Depression,68.3
+Cyclonic Storm,Cyclonic Storm,87.7
+Cyclonic Storm,Depression,51.6
+Cyclonic Storm,Cyclonic Storm,97.9
+Cyclonic Storm,Severe Cyclonic Storm,55.6
+Cyclonic Storm,Cyclonic Storm,100.0
+Cyclonic Storm,Cyclonic Storm,82.4
+Cyclonic Storm,Depression,97.0
+Cyclonic Storm,Depression,98.6
+Cyclonic Storm,Depression,99.6
+Cyclonic Storm,Depression,85.1
+Cyclonic Storm,Cyclonic Storm,51.0
+Cyclonic Storm,Depression,58.4
+Cyclonic Storm,Depression,77.6
+Cyclonic Storm,Cyclonic Storm,63.6
+Cyclonic Storm,Depression,97.3
+Cyclonic Storm,Depression,85.4
+Cyclonic Storm,Depression,99.0
+Cyclonic Storm,Cyclonic Storm,94.4
+Cyclonic Storm,Depression,58.2
+Cyclonic Storm,Depression,92.4
+Depression,Depression,100.0
+Depression,Depression,93.6
+Depression,Depression,99.4
+Depression,Depression,81.1
+Depression,Depression,63.4
+Depression,Depression,99.8
+Depression,Depression,100.0
+Depression,Depression,99.9
+Depression,Depression,99.4
+Depression,Depression,99.3
+Cyclonic Storm,Cyclonic Storm,73.0
+Cyclonic Storm,Very Severe Cyclonic Storm,94.2
+Cyclonic Storm,Severe Cyclonic Storm,99.7
+Cyclonic Storm,Severe Cyclonic Storm,50.6
+Cyclonic Storm,Very Severe Cyclonic Storm,100.0
+Cyclonic Storm,Depression,86.9
+Cyclonic Storm,Severe Cyclonic Storm,72.6
+Depression,Cyclonic Storm,92.0
+Depression,Depression,97.0
+Depression,Depression,99.8
+Depression,Depression,59.9
+Depression,Depression,99.4
+Depression,Depression,99.6
+Depression,Depression,100.0
+Depression,Depression,93.7
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,99.9
+Depression,Depression,77.2
+Cyclonic Storm,Cyclonic Storm,52.2
+Cyclonic Storm,Cyclonic Storm,52.3
+Cyclonic Storm,Depression,62.4
+Cyclonic Storm,Depression,72.7
+Cyclonic Storm,Depression,93.5
+Cyclonic Storm,Cyclonic Storm,96.0
+Cyclonic Storm,Cyclonic Storm,98.6
+Cyclonic Storm,Cyclonic Storm,99.9
+Cyclonic Storm,Cyclonic Storm,73.0
+Cyclonic Storm,Cyclonic Storm,41.0
+Cyclonic Storm,Severe Cyclonic Storm,96.4
+Cyclonic Storm,Depression,79.1
+Cyclonic Storm,Depression,99.6
+Severe Cyclonic Storm,Depression,95.4
+Severe Cyclonic Storm,Depression,99.2
+Severe Cyclonic Storm,Depression,99.8
+Very Severe Cyclonic Storm,Cyclonic Storm,60.0
+Very Severe Cyclonic Storm,Cyclonic Storm,80.6
+Very Severe Cyclonic Storm,Extremely Severe/Super Cyclone,75.4
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.9
+Severe Cyclonic Storm,Severe Cyclonic Storm,65.6
+Cyclonic Storm,Severe Cyclonic Storm,66.9
+Depression,Severe Cyclonic Storm,87.1
+Depression,Depression,99.9
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,99.9
+Depression,Depression,99.4
+Depression,Depression,99.9
+Depression,Depression,99.8
+Depression,Cyclonic Storm,98.9
+Depression,Depression,99.5
+Depression,Depression,99.9
+Depression,Depression,73.2
+Depression,Depression,87.2
+Depression,Depression,51.2
+Depression,Cyclonic Storm,98.2
+Depression,Cyclonic Storm,98.2
+Depression,Depression,65.9
+Depression,Depression,95.9
+Depression,Depression,72.9
+Depression,Depression,94.1
+Depression,Depression,67.4
+Cyclonic Storm,Depression,99.6
+Cyclonic Storm,Cyclonic Storm,99.7
+Cyclonic Storm,Cyclonic Storm,98.6
+Cyclonic Storm,Cyclonic Storm,96.4
+Cyclonic Storm,Cyclonic Storm,97.0
+Cyclonic Storm,Cyclonic Storm,98.5
+Cyclonic Storm,Cyclonic Storm,63.6
+Cyclonic Storm,Cyclonic Storm,100.0
+Cyclonic Storm,Cyclonic Storm,99.1
+Cyclonic Storm,Cyclonic Storm,72.9
+Cyclonic Storm,Depression,96.3
+Cyclonic Storm,Cyclonic Storm,99.5
+Cyclonic Storm,Cyclonic Storm,79.1
+Cyclonic Storm,Depression,99.6
+Cyclonic Storm,Cyclonic Storm,61.7
+Cyclonic Storm,Depression,69.5
+Cyclonic Storm,Depression,99.9
+Depression,Depression,95.0
+Depression,Depression,62.2
+Depression,Cyclonic Storm,87.6
+Depression,Cyclonic Storm,91.5
+Depression,Depression,89.7
+Depression,Depression,99.4
+Depression,Depression,89.6
+Depression,Depression,99.8
+Depression,Depression,88.2
+Depression,Depression,99.2
+Depression,Depression,92.1
+Depression,Depression,94.5
+Depression,Cyclonic Storm,67.6
+Depression,Cyclonic Storm,79.9
+Depression,Depression,72.0
+Depression,Depression,91.5
+Depression,Very Severe Cyclonic Storm,94.8
+Depression,Severe Cyclonic Storm,85.8
+Depression,Very Severe Cyclonic Storm,34.2
+Depression,Cyclonic Storm,57.3
+Depression,Cyclonic Storm,98.6
+Depression,Cyclonic Storm,96.5
+Cyclonic Storm,Cyclonic Storm,93.6
+Cyclonic Storm,Cyclonic Storm,81.4
+Cyclonic Storm,Cyclonic Storm,80.7
+Cyclonic Storm,Severe Cyclonic Storm,53.0
+Cyclonic Storm,Very Severe Cyclonic Storm,90.8
+Cyclonic Storm,Very Severe Cyclonic Storm,98.4
+Cyclonic Storm,Severe Cyclonic Storm,99.1
+Severe Cyclonic Storm,Extremely Severe/Super Cyclone,89.9
+Severe Cyclonic Storm,Very Severe Cyclonic Storm,52.1
+Severe Cyclonic Storm,Very Severe Cyclonic Storm,48.1
+Severe Cyclonic Storm,Cyclonic Storm,86.8
+Severe Cyclonic Storm,Cyclonic Storm,51.1
+Severe Cyclonic Storm,Severe Cyclonic Storm,54.0
+Severe Cyclonic Storm,Severe Cyclonic Storm,98.6
+Severe Cyclonic Storm,Depression,55.9
+Severe Cyclonic Storm,Depression,88.8
+Cyclonic Storm,Depression,96.5
+Cyclonic Storm,Depression,99.9
+Cyclonic Storm,Depression,100.0
+Depression,Depression,87.8
+Depression,Depression,96.9
+Depression,Depression,98.2
+Depression,Depression,99.8
+Depression,Depression,84.8
+Depression,Depression,99.9
+Depression,Depression,99.3
+Depression,Depression,99.3
+Depression,Depression,100.0
+Depression,Depression,99.9
+Depression,Depression,99.5
+Depression,Depression,83.8
+Depression,Depression,63.3
+Depression,Depression,99.9
+Depression,Depression,99.9
+Depression,Depression,100.0
+Depression,Depression,82.0
+Depression,Depression,99.0
+Depression,Depression,94.5
+Depression,Depression,53.7
+Depression,Severe Cyclonic Storm,86.7
+Depression,Depression,80.4
+Depression,Depression,99.9
+Depression,Depression,100.0
+Depression,Depression,99.6
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,98.8
+Depression,Depression,99.6
+Depression,Depression,95.2
+Cyclonic Storm,Depression,98.0
+Cyclonic Storm,Depression,100.0
+Cyclonic Storm,Depression,52.9
+Cyclonic Storm,Cyclonic Storm,68.1
+Cyclonic Storm,Cyclonic Storm,90.5
+Severe Cyclonic Storm,Severe Cyclonic Storm,59.1
+Severe Cyclonic Storm,Severe Cyclonic Storm,82.2
+Severe Cyclonic Storm,Severe Cyclonic Storm,95.9
+Severe Cyclonic Storm,Severe Cyclonic Storm,90.9
+Severe Cyclonic Storm,Severe Cyclonic Storm,92.7
+Very Severe Cyclonic Storm,Severe Cyclonic Storm,94.7
+Severe Cyclonic Storm,Severe Cyclonic Storm,86.2
+Severe Cyclonic Storm,Severe Cyclonic Storm,53.4
+Severe Cyclonic Storm,Severe Cyclonic Storm,92.3
+Cyclonic Storm,Extremely Severe/Super Cyclone,57.1
+Cyclonic Storm,Cyclonic Storm,95.6
+Depression,Depression,50.9
+Depression,Severe Cyclonic Storm,61.0
+Depression,Depression,91.1
+Depression,Depression,99.6
+Depression,Depression,98.9
+Depression,Depression,98.2
+Depression,Depression,98.4
+Depression,Depression,81.6
+Depression,Depression,70.1
+Depression,Depression,100.0
+Depression,Depression,99.0
+Cyclonic Storm,Depression,98.0
+Cyclonic Storm,Cyclonic Storm,49.5
+Severe Cyclonic Storm,Depression,80.8
+Severe Cyclonic Storm,Severe Cyclonic Storm,68.8
+Severe Cyclonic Storm,Severe Cyclonic Storm,29.1
+Severe Cyclonic Storm,Severe Cyclonic Storm,56.2
+Very Severe Cyclonic Storm,Cyclonic Storm,37.8
+Very Severe Cyclonic Storm,Very Severe Cyclonic Storm,66.5
+Very Severe Cyclonic Storm,Cyclonic Storm,71.3
+Very Severe Cyclonic Storm,Severe Cyclonic Storm,99.5
+Extremely Severe/Super Cyclone,Very Severe Cyclonic Storm,72.9
+Extremely Severe/Super Cyclone,Extremely Severe/Super Cyclone,98.1
+Extremely Severe/Super Cyclone,Extremely Severe/Super Cyclone,100.0
+Extremely Severe/Super Cyclone,Extremely Severe/Super Cyclone,100.0
+Extremely Severe/Super Cyclone,Extremely Severe/Super Cyclone,100.0
+Extremely Severe/Super Cyclone,Very Severe Cyclonic Storm,83.2
+Very Severe Cyclonic Storm,Very Severe Cyclonic Storm,70.8
+Very Severe Cyclonic Storm,Depression,95.0
+Severe Cyclonic Storm,Severe Cyclonic Storm,78.2
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.9
+Cyclonic Storm,Depression,98.9
+Cyclonic Storm,Depression,52.0
+Cyclonic Storm,Cyclonic Storm,64.7
+Cyclonic Storm,Depression,86.5
+Cyclonic Storm,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,99.9
+Depression,Depression,99.0
+Depression,Depression,88.9
+Depression,Depression,99.4
+Depression,Depression,99.8
+Depression,Depression,99.6
+Depression,Depression,94.4
+Depression,Depression,98.8
+Depression,Depression,95.0
+Depression,Depression,100.0
+Depression,Depression,99.8
+Depression,Cyclonic Storm,71.9
+Depression,Depression,94.8
+Cyclonic Storm,Depression,95.0
+Cyclonic Storm,Cyclonic Storm,74.1
+Cyclonic Storm,Depression,94.7
+Cyclonic Storm,Cyclonic Storm,76.8
+Cyclonic Storm,Depression,98.4
+Severe Cyclonic Storm,Severe Cyclonic Storm,87.5
+Severe Cyclonic Storm,Depression,70.7
+Severe Cyclonic Storm,Severe Cyclonic Storm,97.5
+Severe Cyclonic Storm,Severe Cyclonic Storm,60.0
+Severe Cyclonic Storm,Depression,43.4
+Severe Cyclonic Storm,Cyclonic Storm,57.8
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.8
+Severe Cyclonic Storm,Severe Cyclonic Storm,97.5
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.2
+Severe Cyclonic Storm,Severe Cyclonic Storm,61.3
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.6
+Severe Cyclonic Storm,Severe Cyclonic Storm,94.8
+Severe Cyclonic Storm,Severe Cyclonic Storm,99.5
+Cyclonic Storm,Severe Cyclonic Storm,99.8
+Cyclonic Storm,Severe Cyclonic Storm,69.6
+Cyclonic Storm,Very Severe Cyclonic Storm,63.3
+Cyclonic Storm,Severe Cyclonic Storm,100.0
+Cyclonic Storm,Severe Cyclonic Storm,97.9
+Depression,Severe Cyclonic Storm,96.6
+Depression,Severe Cyclonic Storm,95.2
+Depression,Severe Cyclonic Storm,62.2
+Depression,Severe Cyclonic Storm,88.3
+Depression,Cyclonic Storm,86.2
+Depression,Depression,96.0
+Depression,Depression,85.5
+Depression,Depression,98.3
+Depression,Depression,64.7
+Depression,Cyclonic Storm,90.4
+Depression,Depression,85.4
+Depression,Depression,77.8
+Depression,Depression,99.3
+Depression,Depression,99.8
+Depression,Cyclonic Storm,69.0
+Depression,Cyclonic Storm,47.4
+Depression,Cyclonic Storm,99.9
+Depression,Cyclonic Storm,100.0
+Depression,Severe Cyclonic Storm,72.5
+Depression,Very Severe Cyclonic Storm,78.0
+Cyclonic Storm,Cyclonic Storm,78.0
+Depression,Cyclonic Storm,92.5
+Depression,Depression,74.6
+Depression,Depression,86.1
+Depression,Cyclonic Storm,93.1
+Depression,Depression,65.7
+Depression,Depression,96.8
+Depression,Severe Cyclonic Storm,62.0
+Depression,Depression,100.0
+Depression,Depression,96.6
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,98.1
+Depression,Depression,99.8
+Depression,Depression,99.7
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,98.0
+Depression,Depression,100.0
+Depression,Depression,100.0
+Depression,Depression,98.8
+Depression,Severe Cyclonic Storm,46.3
+Depression,Cyclonic Storm,59.7
+Depression,Depression,89.2

@@ -1,0 +1,24 @@
+{
+  "_note": "Aggregate numbers copied from MODAK.ipynb's cell 21 'ENSEMBLE v3b+s1' row. mean_error_severity_levels and ece_pct_approx come from a later per-image export cell added to the same notebook (v3_ensemble_test_predictions.csv), which replicates backend/predict.py's exact math per image. severe_cyclonic_storm_correct is still null - the export has the data to compute it, but a per-class breakdown hasn't been pulled from it yet. Do not backfill any of this with the old v2 model's numbers.",
+  "source": "MODAK.ipynb cell 21 ('ENSEMBLE v3b+s1' row) + the per-image export cell added after it (v3_ensemble_test_predictions.csv) - matches backend/model_card.py",
+  "model": "EfficientNet-B0 wind-regression ensemble (model_v3b.pth + model_v4_seed1.pth)",
+  "test_images": 520,
+  "test_storms": 12,
+  "accuracy_pct_approx": 53.7,
+  "within_one_class_pct": 93.1,
+  "macro_f1": 0.487,
+  "mean_absolute_error_kt": 10.2,
+  "mean_error_severity_levels": 0.535,
+  "mean_error_severity_levels_note": "Computed from a per-image export added to MODAK.ipynb right after cell 21's scoring cell: replicates backend/predict.py's exact ensemble + 4-rotation averaging for each of the 520 test images to get a predicted class, then averages |predicted class - true class|. Saved as v3_ensemble_test_predictions.csv in the team's Drive.",
+  "ece_pct_approx": 7.61,
+  "ece_pct_note": "Computed from the same per-image export (10 equal-width confidence bins, 0-100%), using each image's actual derived confidence from backend/wind_math.py's Normal-CDF formula (not a measured softmax - see model_card.py's known_failure_modes). Much lower than v2's ~27%, though the two aren't measuring the same kind of confidence, so this shows the derived confidence tracks accuracy reasonably well - it isn't a direct apples-to-apples improvement over v2's ECE.",
+  "test_share_depression_pct_approx": 41.2,
+  "test_class_counts_known": {
+    "Cyclonic Storm": 171,
+    "Severe Cyclonic Storm": 79,
+    "Very Severe Cyclonic Storm": 30,
+    "Extremely Severe/Super Cyclone": 26
+  },
+  "severe_cyclonic_storm_correct": null,
+  "severe_cyclonic_storm_correct_note": "Not available - needs the v3 ensemble's per-image predictions on the 79 Severe Cyclonic Storm test images specifically, which were never exported from the notebook (only the aggregate 53.7%/93.1% numbers were printed)."
+}
