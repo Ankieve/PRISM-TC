@@ -125,6 +125,14 @@ ERA5_BOX_DEGREES = _float("ERA5_BOX_DEGREES", 0.5)
 # this is a soft client-side cutoff, not a claim about how CDS itself
 # behaves.
 ERA5_REQUEST_TIMEOUT_SECONDS = _int("ERA5_REQUEST_TIMEOUT_SECONDS", 90)
+# Live CDS fetch is OFF unless explicitly enabled: the demo must never hang
+# on a queued Copernicus request. With ERA5_LIVE=false (default) only
+# repo-bundled seed files + on-disk cache are served; anything else gets a
+# clear "no seed / live disabled" message, never invented values.
+# The warm-cache script bypasses this per-call (allow_live=True).
+ERA5_LIVE = _bool("ERA5_LIVE", False)
+# Completed/failed jobs are forgotten after this long (stale-job expiry).
+ERA5_JOB_TTL_SECONDS = _int("ERA5_JOB_TTL_SECONDS", 30 * 60)
 
 DATA_DIR = Path(os.environ.get("ERA5_DATA_DIR", BACKEND_DIR / "data" / "era5"))
 CACHE_DIR = DATA_DIR / "cache"
@@ -189,6 +197,7 @@ def status() -> dict:
         "credentials_found": has_rc,
         "ready": ERA5_ENABLED and import_error is None and has_rc,
         "import_error": import_error,
+        "live_enabled": ERA5_ENABLED and ERA5_LIVE,
         "lag_days": ERA5_LAG_DAYS,
         "note": ("ERA5 is a reanalysis: even when this reports ready=true, the "
                  "data returned is from roughly lag_days ago, not the present "
@@ -383,14 +392,13 @@ def _extract(single_path: Path, pressure_path: Path, lat: float, lon: float) -> 
 
 
 def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
-                       use_cache: bool = True) -> dict:
-    """The one function server.py calls. Returns a dict with sst_c,
-    wind_shear_kt, humidity_pct, vorticity_850_s1, valid_time_utc,
-    requested_time_utc, lag_days, lat, lon, cached, source.
+                       use_cache: bool = True, allow_live: bool | None = None) -> dict:
+    """Synchronous fetch (used by era5_warm_cache.py and the tests).
 
-    Raises ERA5NotConfigured (packages missing / no credentials) or
-    ERA5Error (a real attempt failed) - server.py turns both into a clear
-    JSON error response and never lets this crash a request.
+    Lookup order: seed file -> disk cache -> live CDS (only if allow_live,
+    which defaults to the ERA5_LIVE env flag, OFF for the demo). Raises
+    ERA5NotConfigured (packages missing / live disabled / no credentials) or
+    ERA5Error (a real attempt failed). Never invents values.
     """
     if not is_available():
         err = _import_error()
@@ -407,27 +415,25 @@ def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
         if seed is not None:
             return seed
 
-    single_req, pressure_req = _build_requests(lat, lon, when)
+    live = ERA5_LIVE if allow_live is None else allow_live
+    if not live:
+        raise ERA5NotConfigured(
+            "No pre-fetched ERA5 seed file for this point and live CDS fetch is "
+            "disabled (ERA5_LIVE=false - the demo default). Warm one with "
+            "`python backend/era5_warm_cache.py` on a machine with Copernicus "
+            "CDS credentials (CDSAPI_URL/CDSAPI_KEY), or set ERA5_LIVE=true to "
+            "allow a live queued request.")
 
-    # Only one live fetch at a time: CDS queues are slow and each worker
-    # costs a full subprocess. Non-blocking - a second caller gets a clear
-    # "busy" message instead of piling on memory.
-    if not _FETCH_LOCK.acquire(blocking=False):
-        raise ERA5Error("Another ERA5 fetch is already running - try again shortly.")
+    single_req, pressure_req = _build_requests(lat, lon, when)
+    when_iso = when.strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        extracted = _fetch_in_subprocess(
-            lat, lon, when.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            single_req, pressure_req)
+        extracted = _fetch_in_subprocess(lat, lon, when_iso, single_req, pressure_req)
     finally:
-        try:
-            _FETCH_LOCK.release()
-        except RuntimeError:
-            pass
         gc.collect()  # drop any queue/pipe buffers in THIS process promptly
 
     result = {
         **extracted,
-        "requested_time_utc": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "requested_time_utc": when_iso,
         "lag_days": ERA5_LAG_DAYS,
         "lat": lat, "lon": lon,
         "cached": False,
@@ -437,8 +443,11 @@ def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
     return result
 
 
-# Only one live CDS fetch at a time (see fetch_environment).
-_FETCH_LOCK = threading.Lock()
+# Job queue state (the single-flight worker below replaces the old lock:
+# jobs wait in a queue instead of erroring, and there is no lock to leak).
+_JOBS = {}
+_JOBS_LOCK = threading.Lock()
+_WORKER_THREAD = None
 
 
 def _fetch_worker(queue, lat: float, lon: float, when_iso: str,
@@ -448,7 +457,12 @@ def _fetch_worker(queue, lat: float, lon: float, when_iso: str,
     and exits - releasing ALL its memory back to the OS. A crash here
     (segfault/OOM in native NetCDF code) kills only the child; the parent
     sees an empty queue and reports ERA5Error. Must stay picklable and
-    import-light at module level."""
+    import-light at module level.
+    ERA5_TEST_HANG (seconds, env): integration-test hook - sleep before
+    fetching so the parent's hard timeout + terminate path can be exercised
+    deterministically (see backend/tests/test_era5_jobs.py)."""
+    if os.environ.get("ERA5_TEST_HANG"):
+        time.sleep(float(os.environ["ERA5_TEST_HANG"]))
     try:
         out = _fetch_live(lat, lon, single_req, pressure_req)
         out["valid_time_utc"] = out.get("valid_time_utc") or when_iso
@@ -554,3 +568,169 @@ def _fetch_in_subprocess(lat: float, lon: float, when_iso: str,
             raise _classify_worker_error(f"{type(exc).__name__}: {exc}") from exc
     out["valid_time_utc"] = out.get("valid_time_utc") or when_iso
     return out
+
+
+# --------------------------------------------------- async live-fetch jobs --
+# The HTTP layer never blocks on CDS (queues take minutes). submit_fetch()
+# returns a job immediately; ONE background worker thread runs live fetches
+# sequentially in short-lived subprocesses; the frontend polls get_job().
+# No request is ever held open longer than a few seconds.
+def _purge_jobs(now=None):
+    now = time.time() if now is None else now
+    stale = [jid for jid, job in _JOBS.items()
+             if now - job.get("updated", job.get("created", 0)) > ERA5_JOB_TTL_SECONDS]
+    for jid in stale:
+        _JOBS.pop(jid, None)
+
+
+def _public_job(job, attached=False):
+    out = {"job_id": job["job_id"], "status": job["status"],
+           "lat": job["lat"], "lon": job["lon"],
+           "requested_time_utc": job["when_iso"],
+           "created_utc": job["created_utc"], "attached": attached}
+    if job["status"] == "done":
+        out["result"] = job["result"]
+    if job["status"] == "failed":
+        out["error"] = job["error"]
+        out["configured"] = job.get("configured", True)
+    return out
+
+
+def _new_job_id():
+    return hashlib.md5(f"{time.time()}-{os.getpid()}".encode()).hexdigest()[:12]
+
+
+def _worker_loop():
+    """Single worker: FIFO, one live fetch at a time. Never dies (every job
+    is wrapped in try/finally) so there is no lock state to leak - a hung
+    child is killed by _fetch_in_subprocess's hard timeout, the job is
+    marked failed, and the next job proceeds."""
+    while True:
+        job = None
+        with _JOBS_LOCK:
+            for candidate in _JOBS.values():
+                if candidate["status"] == "queued":
+                    job = candidate
+                    job["status"] = "running"
+                    job["started"] = time.time()
+                    job["updated"] = time.time()
+                    break
+        if job is None:
+            time.sleep(0.5)
+            continue
+        try:
+            extracted = _fetch_in_subprocess(
+                job["lat"], job["lon"], job["when_iso"],
+                job["single_req"], job["pressure_req"])
+            result = {**extracted, "requested_time_utc": job["when_iso"],
+                      "lag_days": ERA5_LAG_DAYS,
+                      "lat": job["lat"], "lon": job["lon"],
+                      "cached": False,
+                      "source": "ERA5 reanalysis (Copernicus Climate Data Store) - see backend/era5.py"}
+            _write_cache(job["key"], result)
+            with _JOBS_LOCK:
+                job["status"] = "done"
+                job["result"] = result
+                job["updated"] = time.time()
+        except ERA5NotConfigured as exc:
+            with _JOBS_LOCK:
+                job["status"] = "failed"
+                job["error"] = str(exc)
+                job["configured"] = False
+                job["updated"] = time.time()
+        except Exception as exc:  # noqa: BLE001 - a dead job must never kill the worker
+            with _JOBS_LOCK:
+                job["status"] = "failed"
+                job["error"] = str(exc)
+                job["configured"] = not isinstance(exc, ERA5NotConfigured)
+                job["updated"] = time.time()
+        finally:
+            gc.collect()
+
+
+def _ensure_worker():
+    global _WORKER_THREAD
+    with _JOBS_LOCK:
+        if _WORKER_THREAD is not None and _WORKER_THREAD.is_alive():
+            return
+        _WORKER_THREAD = threading.Thread(target=_worker_loop,
+                                          name="era5-worker", daemon=True)
+        _WORKER_THREAD.start()
+
+
+def submit_fetch(lat: float, lon: float, when_utc: datetime | None = None,
+                 use_cache: bool = True) -> dict:
+    """Enqueue-or-attach a live fetch. ALWAYS returns immediately with a job
+    dict (status queued/running/done/failed) - never blocks on CDS.
+
+    Lookup order: seed file -> disk cache -> live job (only if ERA5_LIVE).
+    A second request for the same (lat, lon, hour) attaches to the running
+    job (attached: true) instead of starting another. Never invents values:
+    with no seed/cache and live disabled, the job is failed with a message
+    saying exactly that.
+    """
+    from datetime import timezone as _tz
+    when = _target_time(when_utc)
+    key = _cache_key(lat, lon, when)
+    when_iso = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+    created_utc = datetime.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _JOBS_LOCK:
+        _purge_jobs()
+        if use_cache:
+            seed = _read_seed(lat, lon)
+            if seed is not None:
+                return {"job_id": "seed", "status": "done", "lat": lat, "lon": lon,
+                        "requested_time_utc": when_iso, "created_utc": created_utc,
+                        "attached": False, "result": seed}
+            cached = _read_cache(key)
+            if cached is not None:
+                return {"job_id": "cache", "status": "done", "lat": lat, "lon": lon,
+                        "requested_time_utc": when_iso, "created_utc": created_utc,
+                        "attached": False, "result": cached}
+        for job in _JOBS.values():
+            if job["key"] == key and job["status"] in ("queued", "running"):
+                return _public_job(job, attached=True)
+        if not ERA5_ENABLED or not ERA5_LIVE:
+            return {"job_id": "none", "status": "failed", "lat": lat, "lon": lon,
+                    "requested_time_utc": when_iso, "created_utc": created_utc,
+                    "attached": False, "configured": False,
+                    "error": ("No pre-fetched ERA5 seed file for this point and live CDS "
+                              "fetch is disabled (ERA5_LIVE=false - the demo default, so the "
+                              "demo never hangs on a Copernicus queue). Nothing was invented: "
+                              "fill SST/shear/humidity in by hand, or warm a seed with "
+                              "`python backend/era5_warm_cache.py`.")}
+        err = _import_error()
+        if err is not None:
+            return {"job_id": "none", "status": "failed", "lat": lat, "lon": lon,
+                    "requested_time_utc": when_iso, "created_utc": created_utc,
+                    "attached": False, "configured": False, "error": err}
+        job = {"job_id": _new_job_id(), "key": key, "lat": lat, "lon": lon,
+               "when_iso": when_iso, "created_utc": created_utc,
+               "status": "queued", "result": None, "error": None,
+               "created": time.time(), "updated": time.time(),
+               "single_req": None, "pressure_req": None}
+        single_req, pressure_req = _build_requests(lat, lon, when)
+        job["single_req"] = single_req
+        job["pressure_req"] = pressure_req
+        _JOBS[job["job_id"]] = job
+        public = _public_job(job)
+    _ensure_worker()
+    return public
+
+
+def get_job(job_id: str):
+    """Poll a job. Stale running jobs (worker lost track) expire to failed
+    instead of hanging forever."""
+    with _JOBS_LOCK:
+        _purge_jobs()
+        job = _JOBS.get(job_id)
+        if job is None:
+            return None
+        if job["status"] == "running" and \
+                time.time() - job.get("started", job["updated"]) > ERA5_REQUEST_TIMEOUT_SECONDS + 120:
+            job["status"] = "failed"
+            job["error"] = ("Live fetch worker went silent (stale job expired) - "
+                            "submit again to retry; the next attempt starts clean.")
+            job["configured"] = True
+            job["updated"] = time.time()
+        return _public_job(job)

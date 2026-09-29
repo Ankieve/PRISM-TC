@@ -201,9 +201,14 @@ async function fetchFromEra5() {
 
     try {
 
-        const result = await apiRequest(
+        const first = await apiRequest(
             `/era5/fetch?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
         );
+
+        const result = await waitForEra5Job(first, statusEl);
+        if (!result) {
+            return;  /* waitForEra5Job already reported polling timeout */
+        }
 
         el("sst").value = result.sst_c;
         el("shear").value = result.wind_shear_kt;
@@ -217,7 +222,8 @@ async function fetchFromEra5() {
 
         statusEl.textContent =
             `Loaded from ERA5 (Copernicus reanalysis, ${result.lag_days}-day typical lag - ` +
-            `not a live observation). ${result.cached ? "Served from local cache." : ""}`;
+            `not a live observation). ${result.cached ? "Served from local cache." : ""}` +
+            (result.seed ? " Pre-fetched value shipped with the app." : "");
 
     } catch (error) {
 
@@ -231,6 +237,54 @@ async function fetchFromEra5() {
         btn.innerHTML = '<svg class="icon"><use href="#icon-satellite"></use></svg> Fetch from ERA5 <small>real reanalysis</small>';
 
     }
+
+}
+
+
+/* Poll a queued/running ERA5 job until it finishes. Each poll is a short
+   request (never held open) - the "fetching from Copernicus, this can take
+   several minutes" message is just UI text while we wait. Returns the result
+   dict, or null if we gave up polling (job keeps running server-side). */
+async function waitForEra5Job(first, statusEl) {
+
+    let job = first;
+
+    if (!job || job.status === "done") {
+        return job.result || job;
+    }
+
+    if (job.status === "failed") {
+        throw new Error(job.error || "ERA5 fetch failed.");
+    }
+
+    const started = Date.now();
+    const deadline = started + 10 * 60 * 1000;   /* stop polling after 10 min */
+
+    while (job.status === "queued" || job.status === "running") {
+
+        const elapsed = Math.round((Date.now() - started) / 1000);
+        statusEl.textContent =
+            `Fetching from Copernicus (job ${job.job_id}, ${job.status}` +
+            `${job.attached ? ", attached to running request" : ""}, ${elapsed}s elapsed) - ` +
+            `CDS queues can take several minutes. You can keep using the app meanwhile.`;
+
+        if (Date.now() > deadline) {
+            statusEl.textContent += " Stopped waiting - the job keeps running server-side; press Fetch again later to pick up the cached result.";
+            statusEl.classList.add("error");
+            return null;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        job = await apiRequest(`/era5/job?id=${encodeURIComponent(job.job_id)}`);
+
+    }
+
+    if (job.status === "failed") {
+        throw new Error(job.error || "ERA5 fetch failed.");
+    }
+
+    return job.result || job;
 
 }
 

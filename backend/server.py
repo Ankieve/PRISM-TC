@@ -478,6 +478,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._era5_status()
             if url.path == "/api/era5/fetch":
                 return self._era5_fetch(parse_qs(url.query))
+            if url.path == "/api/era5/job":
+                return self._era5_job(parse_qs(url.query))
             if url.path.startswith("/api/"):
                 return self._json(404, {"error": "Unknown API route"})
             return self._static(url.path)
@@ -561,15 +563,33 @@ class Handler(BaseHTTPRequestHandler):
         except BadRequest as exc:
             return self._json(400, {"error": str(exc)})
         try:
-            result = era5.fetch_environment(lat, lon)
-            return self._json(200, result)
-        except era5.ERA5NotConfigured as exc:
-            return self._json(503, {"error": str(exc), "configured": False})
-        except era5.ERA5Error as exc:
-            return self._json(502, {"error": str(exc), "configured": True})
+            job = era5.submit_fetch(lat, lon)
+            return self._era5_job_payload(job)
         except Exception as exc:  # noqa: BLE001 - never let this crash the server
             self.log_message("ERROR era5 fetch: %s", exc)
             return self._json(500, {"error": f"Unexpected ERA5 error: {exc}"})
+
+    def _era5_job_payload(self, job):
+        status = job["status"]
+        if status == "done":
+            return self._json(200, job)
+        if status in ("queued", "running"):
+            return self._json(202, job)
+        return self._json(503 if not job.get("configured", True) else 502, job)
+
+    def _era5_job(self, query):
+        if ERA5_IMPORT_ERROR:
+            return self._json(503, {"error": f"ERA5 module unavailable: {ERA5_IMPORT_ERROR}"})
+        job_id = (query.get("id") or [""])[0]
+        if not job_id:
+            return self._json(400, {"error": "'id' query parameter is required."})
+        try:
+            job = era5.get_job(job_id)
+        except Exception as exc:  # noqa: BLE001
+            return self._json(500, {"error": f"Could not read ERA5 job: {exc}"})
+        if job is None:
+            return self._json(404, {"error": "Unknown or expired job id - submit again."})
+        return self._era5_job_payload(job)
 
     def do_POST(self):
         url = urlparse(self.path)

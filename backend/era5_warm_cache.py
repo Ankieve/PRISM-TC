@@ -26,7 +26,7 @@ import era5  # noqa: E402
 def warm(lat: float, lon: float) -> bool:
     print(f"fetching live CDS data for lat={lat} lon={lon} ...")
     try:
-        result = era5.fetch_environment(lat, lon, use_cache=False)
+        result = era5.fetch_environment(lat, lon, use_cache=False, allow_live=True)
     except (era5.ERA5NotConfigured, era5.ERA5Error) as exc:
         print(f"  FAILED: {exc}")
         return False

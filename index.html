@@ -1605,7 +1605,20 @@
                 <p>Real SST / wind-shear / humidity / vorticity for one point from ERA5 (Copernicus
                     Climate Data Store). Needs the operator's own free CDS account - see
                     <code>backend/era5.py</code> for setup and important honesty notes about
-                    reanalysis lag (it is real data, but never real-time).</p>
+                    reanalysis lag (it is real data, but never real-time). Returns immediately:
+                    seed/cache hits come back <code>done</code>; a live request comes back
+                    <code>queued</code>/<code>running</code> with a <code>job_id</code> - poll
+                    <code>/api/era5/job?id=</code> below. Never held open.</p>
+            </div>
+
+            <div class="api-endpoint">
+                <div class="api-endpoint-head">
+                    <span class="api-method get">GET</span>
+                    <code>/api/era5/job</code><span class="api-qs">?id=</span>
+                </div>
+                <p>Poll a live ERA5 job: <code>queued</code> / <code>running</code> /
+                    <code>done</code> (with the result) / <code>failed</code> (with the error).
+                    A second request for the same point attaches to the running job.</p>
             </div>
 
         </div>
