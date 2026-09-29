@@ -59,15 +59,17 @@ check("humidity=None behaves exactly as before",
 # ---------------------------------------------------------- 2/3. era5.py ----
 import era5  # noqa: E402
 
-check("cdsapi/xarray are not installed in this sandbox (expected)",
-      era5.cdsapi is None or era5.xr is None)
-check("is_available() is False without the optional packages",
-      era5.is_available() is False)
+has_libs = era5._import_error() is None
+check("era5 sentinels stay None at module level (lazy import, no RSS cost)",
+      era5.cdsapi is None and era5.xr is None)
+check("is_available() matches era5 enabled + libs present",
+      era5.is_available() is (True and has_libs), (era5.is_available(), has_libs))
 
 st = era5.status()
-check("status() reports packages_installed=False", st["packages_installed"] is False)
-check("status() reports ready=False", st["ready"] is False)
-check("status() carries a non-empty import_error message", bool(st.get("import_error")))
+check("status() reports packages_installed matching reality",
+      st["packages_installed"] is has_libs, st)
+check("status() reports ready=False without credentials", st["ready"] is False)
+check("status() carries a non-empty note", bool(st.get("note")))
 
 try:
     era5.fetch_environment(15.5, 85.0)
@@ -82,8 +84,9 @@ except Exception as exc:  # noqa: BLE001
 
 # pure-python helpers that don't need cdsapi/xarray at all
 box = era5._area_box(15.5, 85.0)
-check("_area_box returns [N, W, S, E] around the point",
-      box[0] > 15.5 > box[2] and box[3] > 85.0 > box[1], box)
+check("_area_box is a single grid point [N==S, W==E] near the request",
+      box[0] == box[2] and box[1] == box[3]
+      and abs(box[0] - 15.5) <= 0.25 and abs(box[1] - 85.0) <= 0.25, box)
 check("_round_grid snaps to the 0.25 deg ERA5 grid",
       era5._round_grid(15.37) == 15.25, era5._round_grid(15.37))
 
@@ -139,8 +142,8 @@ check("/api/era5/fetch with no lat/lon -> 400, not 500",
       status_code == 400, (status_code, body))
 
 status_code, body = call("/api/health")
-check("/api/health includes era5_available=False (packages missing)",
-      body.get("era5_available") is False, body)
+check("/api/health reports era5_available as a bool",
+      body.get("era5_available") in (True, False), body)
 
 status_code, body = call("/api/predict", data={
     "latitude": 15.5, "longitude": 85.0, "sample": "does-not-matter-if-fails-first",

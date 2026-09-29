@@ -1,0 +1,5 @@
+# Pre-fetched ERA5 results for the demo storms live here, one JSON per grid
+# point, written by `python backend/era5_warm_cache.py` (needs a real CDS
+# account). Commit them - Render's disk is wiped on restart, so these seeds
+# are the only ERA5 data the deployed demo can serve without a live request.
+# This file keeps the (otherwise empty) directory in git.

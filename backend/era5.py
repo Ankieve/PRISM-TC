@@ -55,13 +55,15 @@ Setup (on YOUR machine - never in this repo, never in .env)
 """
 from __future__ import annotations
 
-import concurrent.futures
+import gc
 import hashlib
 import json
 import logging
 import math
+import multiprocessing
 import os
 import tempfile
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -126,6 +128,10 @@ ERA5_REQUEST_TIMEOUT_SECONDS = _int("ERA5_REQUEST_TIMEOUT_SECONDS", 90)
 
 DATA_DIR = Path(os.environ.get("ERA5_DATA_DIR", BACKEND_DIR / "data" / "era5"))
 CACHE_DIR = DATA_DIR / "cache"
+# Repo-bundled pre-fetched results (see backend/era5_warm_cache.py). Render's
+# disk is ephemeral, so anything fetched at runtime vanishes on restart;
+# seeds ship WITH the repo, so the demo storms never need a live CDS request.
+SEED_DIR = DATA_DIR / "seed"
 # A given (rounded point, hour) of ERA5 reanalysis never changes once
 # published, so the cache TTL only needs to protect against re-requesting
 # the exact same point repeatedly within one demo session - not correctness.
@@ -134,42 +140,55 @@ CACHE_TTL_SECONDS = _int("ERA5_CACHE_TTL_SECONDS", 6 * 3600)
 
 def ensure_dirs() -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    SEED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # -------------------------------------------------------- optional imports --
-IMPORT_ERROR = None
-try:
-    import cdsapi  # type: ignore
-except Exception as _exc:  # noqa: BLE001
-    cdsapi = None
-    IMPORT_ERROR = f"cdsapi not installed ({type(_exc).__name__}: {_exc})"
+# Memory-critical: cdsapi + xarray + netCDF4 + scipy cost ~70 MB of RSS
+# (measured: fresh python 27 MB -> 98 MB after import). They are NEVER
+# imported at module level here, so the server process stays lean and a
+# fetch can run isolated in a short-lived subprocess (see fetch_environment).
+# `cdsapi`/`xr` stay as None sentinels for backwards-compat checks;
+# availability is probed via find_spec (no import, no memory).
+cdsapi = None
+xr = None
 
-try:
-    import xarray as xr  # type: ignore
-except Exception as _exc:  # noqa: BLE001
-    xr = None
-    if IMPORT_ERROR is None:
-        IMPORT_ERROR = f"xarray not installed ({type(_exc).__name__}: {_exc})"
+
+def _spec_available(name: str) -> bool:
+    try:
+        import importlib.util
+        return importlib.util.find_spec(name) is not None
+    except Exception:
+        return False
+
+
+def _import_error():
+    missing = [n for n in ("cdsapi", "xarray") if not _spec_available(n)]
+    if not missing:
+        return None
+    return ("ERA5 libraries not installed (missing: %s). Install with "
+            "`pip install -r backend/requirements-era5.txt`." % ", ".join(missing))
 
 
 def is_available() -> bool:
     """True only if the optional packages are importable. Does NOT check for
     a valid ~/.cdsapirc - that is only discovered when a request is actually
     attempted, since cdsapi itself is what parses that file."""
-    return ERA5_ENABLED and cdsapi is not None and xr is not None
+    return ERA5_ENABLED and _import_error() is None
 
 
 def status() -> dict:
     """Cheap, side-effect-free status for GET /api/era5/status - never makes
-    a network call."""
+    a network call and never imports the heavy libraries."""
     has_rc = (Path.home() / ".cdsapirc").is_file() or bool(
         os.environ.get("CDSAPI_URL") and os.environ.get("CDSAPI_KEY"))
+    import_error = _import_error()
     return {
         "enabled": ERA5_ENABLED,
-        "packages_installed": cdsapi is not None and xr is not None,
+        "packages_installed": import_error is None,
         "credentials_found": has_rc,
-        "ready": is_available() and has_rc,
-        "import_error": IMPORT_ERROR,
+        "ready": ERA5_ENABLED and import_error is None and has_rc,
+        "import_error": import_error,
         "lag_days": ERA5_LAG_DAYS,
         "note": ("ERA5 is a reanalysis: even when this reports ready=true, the "
                  "data returned is from roughly lag_days ago, not the present "
@@ -224,10 +243,38 @@ def _write_cache(key: str, result: dict) -> None:
         pass  # cache is a convenience, never a hard requirement
 
 
+def _seed_name(lat: float, lon: float) -> str:
+    return f"{_round_grid(lat):.2f}_{_round_grid(lon):.2f}.json"
+
+
+def _read_seed(lat: float, lon: float):
+    """Repo-bundled pre-fetched result for this grid point (see
+    backend/era5_warm_cache.py). Served with its REAL valid_time_utc and a
+    `seed: True` flag so the UI can label it honestly as pre-fetched
+    reanalysis, never as live. Survives Render's ephemeral disk because it
+    ships with the repo."""
+    path = SEED_DIR / _seed_name(lat, lon)
+    if not path.is_file():
+        return None
+    try:
+        result = dict(json.loads(path.read_text()))
+    except (OSError, ValueError):
+        return None
+    result["cached"] = True
+    result["seed"] = True
+    result["source"] = (result.get("source", "ERA5 reanalysis")
+                        + " [pre-fetched seed shipped with the repo]")
+    return result
+
+
 def _area_box(lat: float, lon: float):
-    """CDS 'area' is [North, West, South, East] in degrees."""
-    b = ERA5_BOX_DEGREES
-    return [round(lat + b, 2), round(lon - b, 2), round(lat - b, 2), round(lon + b, 2)]
+    """Smallest possible CDS request: a single ERA5 grid point, i.e.
+    area [N, W, S, E] with N == S and W == E (snapped to the 0.25 deg
+    grid). One grid cell holds ~12 fields for one hour - a few KB, versus
+    a 1 deg box which returns 25x that for no benefit since _nearest()
+    picks the closest point anyway."""
+    la, lo = _round_grid(lat), _round_grid(lon)
+    return [la, lo, la, lo]
 
 
 def _build_requests(lat: float, lon: float, when: datetime):
@@ -254,6 +301,7 @@ def _make_client():
     """Build a cdsapi client. On Render there is no ~/.cdsapirc, so read
     credentials ONLY from env vars (CDSAPI_URL and CDSAPI_KEY). Locally,
     falls back to the default constructor (reads ~/.cdsapirc)."""
+    import cdsapi  # lazy: ~70 MB with xarray/scipy, only in the fetch worker
     url = (os.environ.get("CDSAPI_URL") or "").strip()
     key = (os.environ.get("CDSAPI_KEY") or "").strip()
     if url and key:
@@ -282,6 +330,7 @@ def _nearest(ds, lat: float, lon: float):
 
 
 def _extract(single_path: Path, pressure_path: Path, lat: float, lon: float) -> dict:
+    import xarray as xr  # lazy: only inside the short-lived fetch worker
     with xr.open_dataset(single_path) as ds_s, xr.open_dataset(pressure_path) as ds_p:
         pt_s = _nearest(ds_s, lat, lon)
         pt_p = _nearest(ds_p, lat, lon)
@@ -344,8 +393,9 @@ def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
     JSON error response and never lets this crash a request.
     """
     if not is_available():
+        err = _import_error()
         raise ERA5NotConfigured(
-            IMPORT_ERROR or "ERA5 fetch is disabled (ERA5_ENABLED=false).")
+            err or "ERA5 fetch is disabled (ERA5_ENABLED=false).")
 
     when = _target_time(when_utc)
     key = _cache_key(lat, lon, when)
@@ -353,42 +403,27 @@ def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
         cached = _read_cache(key)
         if cached is not None:
             return cached
-
-    try:
-        client = _make_client()
-    except Exception as exc:  # noqa: BLE001 - typically: no ~/.cdsapirc
-        raise ERA5NotConfigured(
-            "No Copernicus CDS credentials found. Create a free account at "
-            "https://cds.climate.copernicus.eu/, accept the ERA5 licence, and set "
-            "CDSAPI_URL + CDSAPI_KEY env vars (Render) or ~/.cdsapirc (local). "
-            f"Detail: {exc}") from exc
+        seed = _read_seed(lat, lon)
+        if seed is not None:
+            return seed
 
     single_req, pressure_req = _build_requests(lat, lon, when)
 
-    def _do_fetch():
-        single_path = _retrieve(client, "reanalysis-era5-single-levels", single_req)
-        pressure_path = _retrieve(client, "reanalysis-era5-pressure-levels", pressure_req)
+    # Only one live fetch at a time: CDS queues are slow and each worker
+    # costs a full subprocess. Non-blocking - a second caller gets a clear
+    # "busy" message instead of piling on memory.
+    if not _FETCH_LOCK.acquire(blocking=False):
+        raise ERA5Error("Another ERA5 fetch is already running - try again shortly.")
+    try:
+        extracted = _fetch_in_subprocess(
+            lat, lon, when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            single_req, pressure_req)
+    finally:
         try:
-            return _extract(single_path, pressure_path, lat, lon)
-        finally:
-            for p in (single_path, pressure_path):
-                try:
-                    p.unlink(missing_ok=True)
-                except Exception:  # noqa: BLE001
-                    pass
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_do_fetch)
-        try:
-            extracted = future.result(timeout=ERA5_REQUEST_TIMEOUT_SECONDS)
-        except concurrent.futures.TimeoutError as exc:
-            raise ERA5Error(
-                f"CDS did not respond within {ERA5_REQUEST_TIMEOUT_SECONDS}s (it queues "
-                "requests and can be slow at busy times). The request keeps running in "
-                "the background - try again shortly, it may hit the cache next time."
-            ) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ERA5Error(f"ERA5 request failed: {type(exc).__name__}: {exc}") from exc
+            _FETCH_LOCK.release()
+        except RuntimeError:
+            pass
+        gc.collect()  # drop any queue/pipe buffers in THIS process promptly
 
     result = {
         **extracted,
@@ -400,3 +435,122 @@ def fetch_environment(lat: float, lon: float, when_utc: datetime | None = None,
     }
     _write_cache(key, result)
     return result
+
+
+# Only one live CDS fetch at a time (see fetch_environment).
+_FETCH_LOCK = threading.Lock()
+
+
+def _fetch_worker(queue, lat: float, lon: float, when_iso: str,
+                  single_req: dict, pressure_req: dict):
+    """Runs in a SHORT-LIVED child process (spawn): imports the ~70 MB libs,
+    does the CDS download + NetCDF decode, puts a plain dict on the queue
+    and exits - releasing ALL its memory back to the OS. A crash here
+    (segfault/OOM in native NetCDF code) kills only the child; the parent
+    sees an empty queue and reports ERA5Error. Must stay picklable and
+    import-light at module level."""
+    try:
+        out = _fetch_live(lat, lon, single_req, pressure_req)
+        out["valid_time_utc"] = out.get("valid_time_utc") or when_iso
+        queue.put({"ok": True, "result": out})
+    except Exception as exc:  # noqa: BLE001 - child must never die silently
+        try:
+            queue.put({"ok": False, "error": f"{type(exc).__name__}: {exc}"})
+        except Exception:
+            pass
+
+
+def _fetch_live(lat: float, lon: float, single_req: dict, pressure_req: dict) -> dict:
+    """One real CDS round-trip in the CURRENT process. Used by the worker
+    child, and as a last-resort fallback when no child process can be
+    started at all (then the heavy libs land in this process - correctness
+    first, isolation best-effort)."""
+    client = _make_client()
+    single_path = _retrieve(client, "reanalysis-era5-single-levels", single_req)
+    pressure_path = _retrieve(client, "reanalysis-era5-pressure-levels", pressure_req)
+    try:
+        return _extract(single_path, pressure_path, lat, lon)
+    finally:
+        for p in (single_path, pressure_path):
+            try:
+                p.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _classify_worker_error(detail: str):
+    """Map a worker child's failure string to the right exception type."""
+    if "cdsapirc" in detail.lower() or "credentials" in detail.lower() \
+            or "401" in detail or "403" in detail:
+        return ERA5NotConfigured(
+            "No Copernicus CDS credentials found. Create a free account at "
+            "https://cds.climate.copernicus.eu/, accept the ERA5 licence, and set "
+            "CDSAPI_URL + CDSAPI_KEY env vars (Render) or ~/.cdsapirc (local). "
+            f"Detail: {detail}")
+    return ERA5Error(f"ERA5 request failed: {detail}")
+
+
+def _spawn_fetch(lat: float, lon: float, when_iso: str,
+                 single_req: dict, pressure_req: dict, ctx_name: str) -> dict:
+    ctx = multiprocessing.get_context(ctx_name)
+    queue = ctx.Queue()
+    proc = ctx.Process(target=_fetch_worker,
+                       args=(queue, lat, lon, when_iso, single_req, pressure_req),
+                       daemon=True)
+    proc.start()  # may raise RuntimeError when spawn is impossible here
+    try:
+        proc.join(timeout=ERA5_REQUEST_TIMEOUT_SECONDS)
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=10)
+            raise ERA5Error(
+                f"CDS did not respond within {ERA5_REQUEST_TIMEOUT_SECONDS}s (it queues "
+                "requests and can be slow at busy times). Try again shortly - a "
+                "completed job is cached on disk.")
+        try:
+            msg = queue.get_nowait()
+        except Exception:
+            raise ERA5Error("ERA5 worker ended without a result (exit "
+                            f"code {proc.exitcode}) - likely killed for memory. "
+                            "Try again shortly.") from None
+        if not msg.get("ok"):
+            raise _classify_worker_error(msg.get("error", "unknown worker error"))
+        return msg["result"]
+    finally:
+        try:
+            queue.close()
+        except Exception:
+            pass
+        del queue
+        gc.collect()
+
+
+def _fetch_in_subprocess(lat: float, lon: float, when_iso: str,
+                         single_req: dict, pressure_req: dict) -> dict:
+    """Isolation-first dispatcher. Production path is a spawn child (fresh
+    ~30 MB process, zero shared state with the server). If spawn is
+    impossible here (Windows/macOS process started from an unguarded
+    __main__ - dev scripts and tests), fall back to fork (Linux), and only
+    as a last resort run in-process on a bounded thread."""
+    args = (lat, lon, when_iso, single_req, pressure_req)
+    try:
+        return _spawn_fetch(*args, "spawn")
+    except RuntimeError as exc:
+        log.warning("spawn unavailable (%s) - trying fork fallback", exc)
+    try:
+        return _spawn_fetch(*args, "fork")
+    except Exception as exc:  # noqa: BLE001 - no fork on Windows
+        log.warning("fork unavailable (%s) - running fetch in-process", exc)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_fetch_live, lat, lon, single_req, pressure_req)
+        try:
+            out = future.result(timeout=ERA5_REQUEST_TIMEOUT_SECONDS)
+        except concurrent.futures.TimeoutError as exc:
+            raise ERA5Error(
+                f"CDS did not respond within {ERA5_REQUEST_TIMEOUT_SECONDS}s (it queues "
+                "requests and can be slow at busy times). Try again shortly.") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise _classify_worker_error(f"{type(exc).__name__}: {exc}") from exc
+    out["valid_time_utc"] = out.get("valid_time_utc") or when_iso
+    return out

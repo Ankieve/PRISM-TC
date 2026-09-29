@@ -67,8 +67,15 @@ installed - same fallback behaviour as before.
 import os
 from pathlib import Path
 
+import gc
 import numpy as np
 import torch
+
+# Memory: single-threaded inference. torch's default uses all cores (8 here),
+# each thread pool + oneDNN workspace adding tens of MB of peak RSS per
+# request for zero accuracy benefit on single-image CPU inference.
+# Override only for local benchmarking: TORCH_NUM_THREADS=N.
+torch.set_num_threads(int(os.environ.get("TORCH_NUM_THREADS", "1")))
 import timm
 from torchvision import transforms
 
@@ -105,14 +112,24 @@ TTA_ROTATIONS = int(os.environ.get("TTA_ROTATIONS", "4"))
 
 
 class _WindEnsemble(torch.nn.Module):
-    """Averages the wind output of the ensemble members."""
+    """Averages the wind output of the ensemble members, one after the
+    other, freeing each member's output before running the next - peak
+    memory stays at one member + one output tensor, never both members
+    plus a stacked buffer."""
 
     def __init__(self, members):
         super().__init__()
         self.members = torch.nn.ModuleList(members)
 
     def forward(self, x):
-        return torch.stack([m(x) for m in self.members]).mean(0)
+        total = None
+        for m in self.members:
+            out = m(x)
+            total = out if total is None else total + out
+            del out
+        result = total / len(self.members)
+        del total
+        return result
 
 
 def _load_member(path):
@@ -173,8 +190,11 @@ def predict(image):
             float(_ensemble(torch.rot90(tensor, k, (2, 3)))[0, 0]) * 100.0
             for k in range(TTA_ROTATIONS)
         ])
+    del tensor
     kt = float(winds.mean())
     spread = float(winds.max() - winds.min())
+    del winds
+    gc.collect()
     sigma = max(MEASURED_MAE_KT, spread)
 
     idx = wind_to_class(kt)
