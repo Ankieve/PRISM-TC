@@ -27,6 +27,9 @@ true single-channel IR data replicated into RGB, so colorfulness ~= 0):
     mean brightness : 115.9 - 199.9
     brightness std   : 39.0  - 68.9
     colorfulness      : ~0.00 (true grayscale)
+    near-white fraction (gray > 240): 0.008 - 0.259
+        (cloud tops are bright but rarely saturate whole regions; documents,
+        screenshots and web pages are typically >60% near-white paper)
 """
 
 from pathlib import Path
@@ -54,6 +57,11 @@ _SOFT_PAD = 25.0
 _STRONG_PAD = 35.0
 _COLORFULNESS_SOFT = 6.0
 _COLORFULNESS_STRONG = 15.0
+
+# A mostly near-white image is a document, screenshot or web page, not an
+# IR chip: the brightest sample is 0.259 near-white, documents measured
+# 0.60+. 0.45 splits the gap with margin on both sides.
+_WHITE_FRACTION_STRONG = 0.45
 
 # If two or more signals are each only "warning"-level on their own, that
 # combination is treated as strong evidence together (a document that is a
@@ -102,7 +110,7 @@ def assess(image):
           "stats": {"mean_brightness": float, "brightness_std": float, "colorfulness": float},
         }
     """
-    mean_b, std_b, colorfulness = _measure_image(image)
+    mean_b, std_b, colorfulness, white_fraction = _measure_image(image)
     reasons = []
     level = "none"
     warning_signal_count = 0
@@ -153,6 +161,25 @@ def assess(image):
     elif std_b < slo - _SOFT_PAD:
         reasons.append(f"Image contrast (std {std_b:.0f}) is lower than the reference range.")
         bump("warning")
+    # High-contrast mirror of the low-contrast checks above: real IR chips are
+    # smooth cloud-top fields (std <= 68.9 in all 10 samples); documents and
+    # screenshots full of sharp black-on-white edges measure far higher.
+    if std_b > shi + _STRONG_PAD:
+        reasons.append(
+            f"Image has extreme contrast (std {std_b:.0f}) - sharp black-on-white "
+            "edges like text or UI chrome, unlike smooth cloud-top IR imagery."
+        )
+        bump("likely_ood")
+    elif std_b > shi + _SOFT_PAD:
+        reasons.append(f"Image contrast (std {std_b:.0f}) is higher than the reference range.")
+        bump("warning")
+
+    if white_fraction > _WHITE_FRACTION_STRONG:
+        reasons.append(
+            f"Image is mostly near-white ({white_fraction:.0%} of pixels above 240) - "
+            "looks like a document, screenshot or web page, not an infrared chip."
+        )
+        bump("likely_ood")
 
     # Compound signals: no single measurement crossed the strong threshold on
     # its own, but two or more independent measurements are each borderline
@@ -173,6 +200,7 @@ def assess(image):
             "mean_brightness": round(mean_b, 1),
             "brightness_std": round(std_b, 1),
             "colorfulness": round(colorfulness, 2),
+            "white_fraction": round(white_fraction, 3),
         },
         "reference": {
             "mean_brightness_range": [round(lo, 1), round(hi, 1)],
@@ -187,4 +215,5 @@ def _measure_image(image):
     gray = arr.mean(axis=2)
     r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
     colorfulness = (np.abs(r - g).mean() + np.abs(g - b).mean() + np.abs(r - b).mean()) / 3.0
-    return float(gray.mean()), float(gray.std()), float(colorfulness)
+    white_fraction = float((gray > 240).mean())
+    return float(gray.mean()), float(gray.std()), float(colorfulness), white_fraction
