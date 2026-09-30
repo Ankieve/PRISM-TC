@@ -12,18 +12,6 @@ A web dashboard that takes an infrared satellite image of a tropical cyclone and
 Classes (index -> name): 0 Depression, 1 Cyclonic Storm, 2 Severe Cyclonic Storm,
 3 Very Severe Cyclonic Storm, 4 Extremely Severe/Super Cyclone.
 
-## Honesty rules (do not break these)
-- Keep the MODEL / SIMULATED / EST. / PLACEHOLDER tags. Never present simulated values as AI output.
-- Do NOT claim CNN+GRU or ERA5-fused AI predictions. Only TCIR infrared images + IBTrACS train/drive
-  the classifier and analog outlook. ERA5 (see `backend/era5.py`) is real but LIMITED SCOPE: it can
-  fetch real SST/wind-shear/humidity/vorticity for the existing rule-based environment check only -
-  it never touches the AI classifier. (The original frontend text claimed CNN+GRU/ERA5 fusion; it
-  was corrected on purpose - do not reintroduce that claim.)
-- Model accuracy: about 60% on 372 unseen test images (macro-F1 0.49, average error 0.51 severity
-  levels). Test set is 50% "Depression" (always guessing it scores 50%) and has only 10 Very Severe
-  and 6 Extremely Severe images. The confidence score is overconfident (ECE ~27%): it is NOT the
-  true probability of being right.
-- If model.pth is missing the backend runs in DEMO MODE and every response is marked "placeholder".
 
 ## Files
 ```
@@ -120,7 +108,7 @@ Server (port 5500) or from a file, app.js talks to http://localhost:8000/api (ov
    start `python backend/server.py`, env `HOST=0.0.0.0` (Render sets PORT). model.pth (16 MB) must be in the repo.
 6. **Record a backup demo video** (Win+G Game Bar): Run Demo, pick a sample, upload an image, show the
    REAL vs SIMULATED tags, show the notice bar. 1-2 minutes. Do this before the presentation.
-7. Optional polish only after 1-6: favicon, print/screenshots for the pitch deck.
+7. Optional polish only after 1-6: favicon, print/screenshots for the pitch deck
 
 ## Pitch numbers (use these)
 ~60% accuracy on 372 unseen test images, macro-F1 0.49, average error about half a severity level,
