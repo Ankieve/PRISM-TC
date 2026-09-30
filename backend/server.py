@@ -297,8 +297,9 @@ def run_prediction(body):
             # ood_guard.py's docstring for exactly what triggered this.
             return {
                 "rejected": True,
-                "reason": "This does not look like a TCIR-style satellite infrared image, "
-                          "so no cyclone category is shown rather than guessing one.",
+                "reason": "Invalid input: this does not look like a TCIR-style tropical "
+                          "cyclone infrared image, so no cyclone category is shown rather "
+                          "than guessing one.",
                 "ood": ood,
                 "meta": {
                     "mode": "image",

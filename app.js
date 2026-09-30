@@ -191,6 +191,27 @@ function clearEra5Badge() {
     }
 }
 
+/* ERA5 needs a known storm position, which only a built-in sample image
+   carries (storm_id + IBTrACS lat/lon). A user upload or typed position is
+   not a known image location, so the button stays disabled with a hint. */
+function updateEra5ButtonState() {
+
+    const btn = el("era5FetchBtn");
+    const statusEl = el("era5Status");
+    if (!btn) {
+        return;
+    }
+
+    const known = !!(selectedImage && selectedImage.kind === "sample");
+    btn.disabled = !known;
+    btn.title = known ? "" : "Select a sample image";
+    if (!known && statusEl && !era5Active) {
+        statusEl.textContent = "Select a sample image to fetch ERA5 for its storm position.";
+        statusEl.classList.remove("error");
+    }
+
+}
+
 async function fetchFromEra5() {
 
     const btn = el("era5FetchBtn");
@@ -471,6 +492,7 @@ function clearImage() {
     el("preview").removeAttribute("src");
     el("sampleSelect").value = "";
     el("imageInput").value = "";
+    updateEra5ButtonState();
 
 }
 
@@ -503,6 +525,8 @@ function chooseSample(filename) {
         sample.filename,
         `Sample from the test set · storm ${sample.storm_id}`
     );
+
+    updateEra5ButtonState();
 
 }
 
@@ -543,6 +567,8 @@ function onFileChosen(event) {
             file.name,
             `${(file.size / 1024).toFixed(0)} KB · uploaded`
         );
+
+        updateEra5ButtonState();
 
     };
 
@@ -886,13 +912,13 @@ function renderRejection(data) {
     const line = el("provenance");
     line.className = "provenance warn";
     line.textContent = data.reason ||
-        "This input does not look like a real satellite cyclone image.";
+        "Invalid input: this does not look like a TCIR-style tropical cyclone infrared image.";
 
     renderOodWarning(data.ood);
     renderDataProvenance(data.meta || {}, { category: "rejected" });
 
     showToast(
-        data.reason || "This doesn't look like a real satellite cyclone image - "
+        data.reason || "Invalid input: this does not look like a TCIR-style tropical cyclone image - "
         + "no category was guessed.",
         "error"
     );
@@ -2051,6 +2077,8 @@ document.addEventListener(
             "change",
             event => chooseSample(event.target.value)
         );
+
+        updateEra5ButtonState();   /* no sample selected yet: disabled + hint */
 
         /* INITIAL MAP MARKER */
 

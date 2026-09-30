@@ -55,8 +55,18 @@ _FALLBACK_STD_RANGE = (39.0, 68.9)
 # for genuinely borderline images. See CLAUDE.md's OOD guard section.
 _SOFT_PAD = 25.0
 _STRONG_PAD = 35.0
-_COLORFULNESS_SOFT = 6.0
-_COLORFULNESS_STRONG = 15.0
+
+# TCIR chips are effectively grayscale (all 10 samples measure 0.00), so any
+# real colour content is suspicious. Was 6.0/15.0 - far too lax: a colour
+# selfie (12.7) passed as a mere "warning" and got classified. 1.0/3.0 keeps
+# huge margin to the samples while rejecting real photos outright.
+_COLORFULNESS_SOFT = 1.0
+_COLORFULNESS_STRONG = 3.0
+
+# TCIR chips are square (all 10 samples are 201x201). A 16:9 selfie stretched
+# to the model input is exactly what must be caught BEFORE resizing, so the
+# aspect of the ORIGINAL image is checked (|w/h - 1| beyond this rejects).
+_ASPECT_TOLERANCE = 0.15
 
 # A mostly near-white image is a document, screenshot or web page, not an
 # IR chip: the brightest sample is 0.259 near-white, documents measured
@@ -99,6 +109,61 @@ def _reference_ranges():
 
 MEAN_RANGE, STD_RANGE = _reference_ranges()
 
+# Feature-space envelope: cosine similarity of the image's L2-normalized
+# GAP-pooled v3b feature vector to the centroid of the 10 samples. Measured
+# leave-one-out: worst real sample 0.76, colour selfie 0.15. 0.50 rejects
+# with wide margins on both sides; 0.50-0.65 warns. Computed lazily from
+# backend/samples/*.png (numpy + onnxruntime only, no torch); skipped when
+# the model files are unavailable (pixel gates still apply).
+_FEATURE_THRESHOLD = 0.50
+_FEATURE_WARN = 0.65
+_FEATURE_CENTROID = None
+_FEATURE_READY = False
+_FEATURE_LOCK = None
+
+
+def _ensure_features():
+    """Load-once centroid for the feature check. Returns True when usable."""
+    global _FEATURE_CENTROID, _FEATURE_READY
+    if _FEATURE_READY:
+        return _FEATURE_CENTROID is not None
+    import threading
+    global _FEATURE_LOCK
+    if _FEATURE_LOCK is None:
+        _FEATURE_LOCK = threading.Lock()
+    with _FEATURE_LOCK:
+        if _FEATURE_READY:
+            return _FEATURE_CENTROID is not None
+        try:
+            from predict import _sessions, preprocess
+            vecs = []
+            for path in sorted(SAMPLES_DIR.glob("*.png")):
+                (tensor,) = preprocess(Image.open(path))
+                _, feat = _sessions[0].run(["logit", "features"], {"input": tensor})
+                v = feat[0].mean(axis=(1, 2)).astype(np.float64)
+                vecs.append(v / np.linalg.norm(v))
+            centroid = np.stack(vecs).mean(axis=0)
+            _FEATURE_CENTROID = centroid / np.linalg.norm(centroid)
+        except Exception:  # noqa: BLE001 - pixels still guard; never fatal
+            _FEATURE_CENTROID = None
+        _FEATURE_READY = True
+        return _FEATURE_CENTROID is not None
+
+
+def _feature_similarity(image):
+    """Cosine similarity to the sample centroid, or None when unavailable."""
+    if not _ensure_features():
+        return None
+    try:
+        from predict import _sessions, preprocess
+        (tensor,) = preprocess(image)
+        _, feat = _sessions[0].run(["logit", "features"], {"input": tensor})
+        v = feat[0].mean(axis=(1, 2)).astype(np.float64)
+        v = v / np.linalg.norm(v)
+        return float(v @ _FEATURE_CENTROID)
+    except Exception:  # noqa: BLE001
+        return None
+
 
 def assess(image):
     """image: a PIL.Image (any mode).
@@ -110,7 +175,7 @@ def assess(image):
           "stats": {"mean_brightness": float, "brightness_std": float, "colorfulness": float},
         }
     """
-    mean_b, std_b, colorfulness, white_fraction = _measure_image(image)
+    mean_b, std_b, colorfulness, white_fraction, aspect = _measure_image(image)
     reasons = []
     level = "none"
     warning_signal_count = 0
@@ -122,6 +187,13 @@ def assess(image):
         order = {"none": 0, "warning": 1, "likely_ood": 2}
         if order[new_level] > order[level]:
             level = new_level
+
+    if abs(aspect - 1.0) > _ASPECT_TOLERANCE:
+        reasons.append(
+            f"Image is not square (aspect ratio {aspect:.2f} - "
+            "TCIR training chips are square storm-centred crops)."
+        )
+        bump("likely_ood")
 
     if colorfulness > _COLORFULNESS_STRONG:
         reasons.append(
@@ -181,6 +253,26 @@ def assess(image):
         )
         bump("likely_ood")
 
+    # Feature-space envelope (last resort, strongest signal): when the pixels
+    # alone do not already reject, compare deep features to the 10 samples.
+    # When unsure, REJECT - a TCIR chip always resembles the training chips.
+    feat_sim = None
+    if level != "likely_ood":
+        feat_sim = _feature_similarity(image)
+        if feat_sim is not None and feat_sim < _FEATURE_THRESHOLD:
+            reasons.append(
+                f"Image features do not resemble TCIR cyclone chips "
+                f"(similarity {feat_sim:.2f} to the sample reference; "
+                f"real chips score above {_FEATURE_THRESHOLD})."
+            )
+            bump("likely_ood")
+        elif feat_sim is not None and feat_sim < _FEATURE_WARN:
+            reasons.append(
+                f"Image features are borderline for a TCIR chip "
+                f"(similarity {feat_sim:.2f})."
+            )
+            bump("warning")
+
     # Compound signals: no single measurement crossed the strong threshold on
     # its own, but two or more independent measurements are each borderline
     # at once - that combination is itself evidence this isn't a TCIR chip
@@ -193,15 +285,18 @@ def assess(image):
         )
         level = "likely_ood"
 
-    return {
-        "level": level,
-        "reasons": reasons,
-        "stats": {
+    stats = {
             "mean_brightness": round(mean_b, 1),
             "brightness_std": round(std_b, 1),
             "colorfulness": round(colorfulness, 2),
             "white_fraction": round(white_fraction, 3),
-        },
+            "aspect_ratio": round(aspect, 3),
+            "feature_similarity": None if feat_sim is None else round(feat_sim, 3),
+        }
+    return {
+        "level": level,
+        "reasons": reasons,
+        "stats": stats,
         "reference": {
             "mean_brightness_range": [round(lo, 1), round(hi, 1)],
             "brightness_std_range": [round(slo, 1), round(shi, 1)],
@@ -211,9 +306,12 @@ def assess(image):
 
 
 def _measure_image(image):
-    arr = np.asarray(image.convert("RGB"), dtype=float)
+    rgb = image.convert("RGB")
+    w, h = rgb.size
+    aspect = (w / h) if h else 0.0
+    arr = np.asarray(rgb, dtype=float)
     gray = arr.mean(axis=2)
     r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
     colorfulness = (np.abs(r - g).mean() + np.abs(g - b).mean() + np.abs(r - b).mean()) / 3.0
     white_fraction = float((gray > 240).mean())
-    return float(gray.mean()), float(gray.std()), float(colorfulness), white_fraction
+    return float(gray.mean()), float(gray.std()), float(colorfulness), white_fraction, float(aspect)
